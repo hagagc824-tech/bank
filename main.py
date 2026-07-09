@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException
 import requests
-import json
 
 app = FastAPI()
 
@@ -8,14 +7,15 @@ app = FastAPI()
 def read_root():
     return {"status": "VPBank API Service is running"}
 
-@app.post("/get-noti")
-def get_vpbank_notification(payload: dict):
+@app.get("/get-noti")
+def get_vpbank_notification():
     """
-    API này nhận body (payload) từ bạn, chèn thêm headers của VPBank và gửi đi.
+    API cấu hình dạng GET để có thể bấm xem trực tiếp từ trình duyệt điện thoại.
+    Nó sẽ tự động gửi gói tin POST cùng các Header cần thiết sang hệ thống VPBank.
     """
     url = "https://asia-east2-vpbank-online-new---prod.cloudfunctions.net/get/notification"
     
-    # Cấu hình các Header (Lưu ý: các key này có thể hết hạn, bạn nên truyền động nếu được)
+    # Các thông tin định danh bạn lấy từ App
     headers = {
         "Host": "asia-east2-vpbank-online-new---prod.cloudfunctions.net",
         "Accept": "application/json",
@@ -30,13 +30,24 @@ def get_vpbank_notification(payload: dict):
         "Cookie": "JSESSIONID=60EF683DA274A7CEA97B61912A9D960A.plf08.cluster01; Path=/cb; HttpOnly"
     }
 
+    # Gói tin nhắn (Payload) mặc định của chức năng lấy thông báo
+    payload = {
+        "page": 1,
+        "pageSize": 20
+    }
+
     try:
+        # Hệ thống của bạn nhận GET nhưng sẽ tạo request POST sang VPBank
         response = requests.post(url, headers=headers, json=payload)
         
         if response.status_code == 200:
             return response.json()
         else:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
+            # Nếu lỗi (ví dụ Token hết hạn), trả về chi tiết lỗi từ VPBank
+            return {
+                "error": f"VPBank returned status code {response.status_code}",
+                "detail": response.text
+            }
             
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": "Lỗi kết nối đến server VPBank", "message": str(e)}
