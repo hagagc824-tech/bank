@@ -2,6 +2,7 @@ from fastapi import FastAPI
 import requests
 import json
 import html
+import ftfy  # Thư viện chuyên trị sửa lỗi font chữ ngoài hành tinh
 
 app = FastAPI()
 
@@ -12,7 +13,8 @@ def read_root():
 @app.get("/get-noti")
 def get_vpbank_notification():
     """
-    API lấy thông báo từ VPBank và ép mã hóa UTF-8 chuẩn tiếng Việt 100%.
+    API tự động bắt byte thô, ép giải mã và dùng AI-Fixer (ftfy) 
+    để chuyển chữ loằng ngoằng thành tiếng Việt chuẩn.
     """
     url = "https://asia-east2-vpbank-online-new---prod.cloudfunctions.net/get/notification"
     
@@ -39,20 +41,25 @@ def get_vpbank_notification():
         response = requests.post(url, headers=headers, json=payload)
         
         if response.status_code == 200:
-            # BƯỚC 1: Ép hệ thống đọc chuỗi byte thô bằng latin1 rồi mã hóa ngược lại sang UTF-8 tiếng Việt chuẩn
-            raw_text = response.text
-            corrected_text = raw_text.encode('latin1').decode('utf-8', errors='ignore')
+            # Đọc bằng byte thô (content) để tránh lỗi bộ giải mã mặc định của requests
+            raw_bytes = response.content
             
-            # Chuyển chuỗi chữ đã sửa thành dạng JSON (Object)
-            result = json.loads(corrected_text)
+            # Thử giải mã trực tiếp bằng utf-8
+            decoded_text = raw_bytes.decode('utf-8', errors='ignore')
             
-            # BƯỚC 2: Loại bỏ tiếp các ký tự code HTML thừa (như &ocirc;, &amp;...)
+            # Dùng ftfy sửa triệt để lỗi chữ lộn xộn (Mojibake)
+            fixed_text = ftfy.fix_text(decoded_text)
+            
+            # Chuyển chuỗi sạch thành JSON
+            result = json.loads(fixed_text)
+            
+            # Làm sạch nốt các ký tự HTML (&ocirc;, &amp;,...) nếu còn sót lại
             if "data" in result and "notification" in result["data"]:
                 for noti in result["data"]["notification"]:
                     if "title" in noti and noti["title"]:
-                        noti["title"] = html.unescape(noti["title"])
+                        noti["title"] = html.unescape(ftfy.fix_text(noti["title"]))
                     if "content" in noti and noti["content"]:
-                        noti["content"] = html.unescape(noti["content"])
+                        noti["content"] = html.unescape(ftfy.fix_text(noti["content"]))
             
             return result
         else:
