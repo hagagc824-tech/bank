@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 import requests
+import json
 import html
 
 app = FastAPI()
@@ -11,8 +12,7 @@ def read_root():
 @app.get("/get-noti")
 def get_vpbank_notification():
     """
-    API tự động sửa lỗi font mã hóa (Encoding) từ VPBank,
-    trả về dữ liệu tiếng Việt chuẩn 100% hiển thị mượt mà trên trình duyệt.
+    API lấy thông báo từ VPBank và ép mã hóa UTF-8 chuẩn tiếng Việt 100%.
     """
     url = "https://asia-east2-vpbank-online-new---prod.cloudfunctions.net/get/notification"
     
@@ -39,33 +39,19 @@ def get_vpbank_notification():
         response = requests.post(url, headers=headers, json=payload)
         
         if response.status_code == 200:
-            # BƯỚC QUAN TRỌNG: Ép sửa lỗi font mã hóa lỗi từ nguồn VPBank sang UTF-8 tiếng Việt
-            corrected_text = response.content.decode('utf-8', errors='ignore')
-            result = json_data = response.json()
+            # BƯỚC 1: Ép hệ thống đọc chuỗi byte thô bằng latin1 rồi mã hóa ngược lại sang UTF-8 tiếng Việt chuẩn
+            raw_text = response.text
+            corrected_text = raw_text.encode('latin1').decode('utf-8', errors='ignore')
             
-            # Nếu ép JSON gốc vẫn lỗi chữ, ta nạp lại từ chuỗi đã sửa encoding
-            try:
-                import json
-                result = json.loads(corrected_text)
-            except:
-                pass
-
-            # Tiếp tục làm sạch các ký tự HTML cũ
+            # Chuyển chuỗi chữ đã sửa thành dạng JSON (Object)
+            result = json.loads(corrected_text)
+            
+            # BƯỚC 2: Loại bỏ tiếp các ký tự code HTML thừa (như &ocirc;, &amp;...)
             if "data" in result and "notification" in result["data"]:
                 for noti in result["data"]["notification"]:
                     if "title" in noti and noti["title"]:
-                        # Sửa lỗi font kép (nếu có) và dịch ký tự HTML
-                        try:
-                            noti["title"] = noti["title"].encode('latin1').decode('utf-8')
-                        except:
-                            pass
                         noti["title"] = html.unescape(noti["title"])
-                        
                     if "content" in noti and noti["content"]:
-                        try:
-                            noti["content"] = noti["content"].encode('latin1').decode('utf-8')
-                        except:
-                            pass
                         noti["content"] = html.unescape(noti["content"])
             
             return result
@@ -76,4 +62,4 @@ def get_vpbank_notification():
             }
             
     except Exception as e:
-        return {"error": "Lỗi hệ thống khi xử lý dữ liệu", "message": str(e)}
+        return {"error": "Lỗi xử lý hệ thống mã hóa", "message": str(e)}
