@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 import requests
+import html  # Thư viện để dịch mã HTML thành Tiếng Việt chuẩn
 
 app = FastAPI()
 
@@ -10,42 +11,48 @@ def read_root():
 @app.get("/get-noti")
 def get_vpbank_notification():
     """
-    API cấu hình dạng GET để có thể bấm xem trực tiếp từ trình duyệt điện thoại.
-    Nó sẽ tự động gửi gói tin POST cùng các Header cần thiết sang hệ thống VPBank.
+    API tự động lấy thông báo từ VPBank và dịch toàn bộ nội dung về Tiếng Việt chuẩn.
     """
     url = "https://asia-east2-vpbank-online-new---prod.cloudfunctions.net/get/notification"
     
-    # Các thông tin định danh bạn lấy từ App
+    # ĐÃ CẬP NHẬT CÁC TOKEN MỚI NHẤT BẠN GỬI
     headers = {
         "Host": "asia-east2-vpbank-online-new---prod.cloudfunctions.net",
         "Accept": "application/json",
         "ChannelType": "NewEbank",
         "Accept-Language": "vi-VN,vi;q=0.9",
-        "TokenKey": "RkZJSEFTSG5HUHdBNTI4SHZzc0FVdFhMZHlMUFlOcVcvMzZIYjhQd25xNndiUTloQnc9",
+        "TokenKey": "RkZJSEFTSDNraTQ4cmxwell2ejFZbGEyVDd1bDE2bU9jV3RVOTNCWE05SmdEZks3WWs9",
         "x-uiux-key": "37/8IiHnkkYelI2u8Lr/+Cidvj/UWlZZnc1hEDzQ1r/NcCqTXD+Ex81H9/E56g==",
         "User-Agent": "VPBankNEO/2026070402 CFNetwork/1410.1 Darwin/22.6.0",
         "Connection": "keep-alive",
         "Content-Type": "application/json",
-        "x-csrf-token": "5240998626390818506",
-        "Cookie": "JSESSIONID=60EF683DA274A7CEA97B61912A9D960A.plf08.cluster01; Path=/cb; HttpOnly"
+        "x-csrf-token": "5393083109632980188",
+        "Cookie": "JSESSIONID=JSESSIONID=4B2C875B6EF5AC7ABEF8A9207F9E87DD.plf54.cluster04; Path=/cb; HttpOnly"
     }
 
-    # Gói tin nhắn (Payload) mặc định của chức năng lấy thông báo
     payload = {
         "page": 1,
         "pageSize": 20
     }
 
     try:
-        # Hệ thống của bạn nhận GET nhưng sẽ tạo request POST sang VPBank
         response = requests.post(url, headers=headers, json=payload)
         
         if response.status_code == 200:
-            return response.json()
+            result = response.json()
+            
+            # Xử lý dịch chữ Tiếng Việt lỗi trong danh sách thông báo trả về
+            if "data" in result and "notification" in result["data"]:
+                for noti in result["data"]["notification"]:
+                    if "title" in noti and noti["title"]:
+                        noti["title"] = html.unescape(noti["title"])
+                    if "content" in noti and noti["content"]:
+                        noti["content"] = html.unescape(noti["content"])
+            
+            return result
         else:
-            # Nếu lỗi (ví dụ Token hết hạn), trả về chi tiết lỗi từ VPBank
             return {
-                "error": f"VPBank returned status code {response.status_code}",
+                "error": f"VPBank trả về mã lỗi {response.status_code}",
                 "detail": response.text
             }
             
